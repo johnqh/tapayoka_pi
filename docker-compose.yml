@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  tapayoka-pi:
+    build: .
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    volumes:
+      - wallet-data:/root/.tapayoka
+      - /var/www/html:/var/www/html
+    environment:
+      - SERVER_WALLET_ADDRESS=${SERVER_WALLET_ADDRESS:-}
+      - GPIO_PIN=${GPIO_PIN:-17}
+
+volumes:
+  wallet-data:
