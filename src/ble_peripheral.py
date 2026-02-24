@@ -1,8 +1,12 @@
 """BLE GATT peripheral for Tapayoka device."""
 
-import json
+from __future__ import annotations
 
-from bluezero import adapter, peripheral
+import json
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from bluezero import adapter, peripheral
 
 from .config import (
     BLE_CHAR_COMMAND_UUID,
@@ -23,12 +27,14 @@ class TapayokaPeripheral:
         self._wallet = wallet
         self._led = led
         self._config = config
-        self._peripheral: peripheral.Peripheral | None = None
+        self._peripheral: Any = None
 
     def _get_adapter_address(self) -> str:
+        from bluezero import adapter as ble_adapter
+
         if self._config.ble_adapter:
             return self._config.ble_adapter
-        adapters = list(adapter.Adapter.available())
+        adapters = list(ble_adapter.Adapter.available())
         if not adapters:
             raise RuntimeError("No BLE adapters found")
         return adapters[0].address
@@ -130,11 +136,13 @@ class TapayokaPeripheral:
 
     def start(self) -> None:
         """Start the BLE peripheral."""
+        from bluezero import peripheral as ble_peripheral
+
         addr = self._get_adapter_address()
         device_name = f"{BLE_DEVICE_NAME_PREFIX}{self._wallet.address_short}"
 
         print(f"[BLE] Starting peripheral: {device_name}")
-        self._peripheral = peripheral.Peripheral(addr, local_name=device_name)
+        self._peripheral = ble_peripheral.Peripheral(addr, local_name=device_name)
         self._peripheral.on_connect = self._on_connect
         self._peripheral.on_disconnect = self._on_disconnect
 
