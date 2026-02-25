@@ -7,6 +7,7 @@ import time
 
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from eth_account.signers.local import LocalAccount
 
 from .config import WALLET_DIR, WALLET_KEY_FILE
 
@@ -18,8 +19,9 @@ class EthWallet:
         self._account = self._load_or_create()
         print(f"[Wallet] Device address: {self.address}")
 
-    def _load_or_create(self) -> Account:
+    def _load_or_create(self) -> LocalAccount:
         """Load existing keypair or generate new one on first boot."""
+        acct: LocalAccount
         if os.path.exists(WALLET_KEY_FILE):
             with open(WALLET_KEY_FILE) as f:
                 data = json.load(f)
@@ -38,14 +40,14 @@ class EthWallet:
 
     @property
     def address(self) -> str:
-        return self._account.address
+        return str(self._account.address)
 
     @property
     def address_short(self) -> str:
         """Short prefix for BLE device name."""
-        return self._account.address[2:10].lower()
+        return str(self._account.address)[2:10].lower()
 
-    def sign_challenge(self) -> dict:
+    def sign_challenge(self) -> dict[str, object]:
         """Create and sign a challenge proving device identity."""
         challenge = {
             "walletAddress": self.address,
@@ -69,7 +71,7 @@ class EthWallet:
             recovered = Account.recover_message(
                 encode_defunct(text=payload), signature=sig_bytes
             )
-            return recovered.lower() == server_address.lower()
+            return bool(recovered.lower() == server_address.lower())
         except Exception as e:
             print(f"[Wallet] Signature verification failed: {e}")
             return False

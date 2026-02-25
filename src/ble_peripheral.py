@@ -34,7 +34,7 @@ class TapayokaPeripheral:
         adapters = list(ble_adapter.Adapter.available())
         if not adapters:
             raise RuntimeError("No BLE adapters found")
-        return adapters[0].address
+        return str(adapters[0].address)
 
     def _on_connect(self, ble_device: str) -> None:
         print(f"[BLE] Device connected: {ble_device}")
@@ -45,7 +45,7 @@ class TapayokaPeripheral:
             print("[BLE] Safety deactivation on disconnect")
             self._led.deactivate()
 
-    def _on_device_info_read(self, options: dict) -> list:
+    def _on_device_info_read(self, options: dict[str, Any]) -> list[int]:
         """Return device info including signed challenge."""
         challenge = self._wallet.sign_challenge()
         server_wallet = self._config.load_server_wallet()
@@ -58,7 +58,7 @@ class TapayokaPeripheral:
         print(f"[BLE] Device info read: {self._wallet.address[:10]}...")
         return list(data)
 
-    def _on_command_write(self, value: list, options: dict) -> None:
+    def _on_command_write(self, value: list[int], options: dict[str, Any]) -> None:
         """Handle incoming BLE commands."""
         try:
             data = json.loads(bytes(value).decode("utf-8"))
@@ -89,7 +89,7 @@ class TapayokaPeripheral:
             print(f"[BLE] Error parsing command: {e}")
             self._send_response("ERROR", str(e))
 
-    def _handle_setup_server(self, data: dict) -> None:
+    def _handle_setup_server(self, data: dict[str, Any]) -> None:
         address = data.get("payload", "")
         if not address or not address.startswith("0x"):
             self._send_response("ERROR", "Invalid server wallet address")
@@ -98,7 +98,7 @@ class TapayokaPeripheral:
         print(f"[BLE] Server wallet set: {address[:10]}...")
         self._send_response("OK", "Server wallet configured")
 
-    def _handle_authorize(self, data: dict) -> None:
+    def _handle_authorize(self, data: dict[str, Any]) -> None:
         payload = data.get("payload", "")
         signature = data.get("signature", "")
         server_wallet = self._config.load_server_wallet()
