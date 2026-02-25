@@ -16,6 +16,8 @@ def temp_wallet_dir(tmp_path):
     with (
         patch("src.eth_wallet.WALLET_DIR", str(tmp_path)),
         patch("src.eth_wallet.WALLET_KEY_FILE", str(tmp_path / "device_key.json")),
+        patch("src.config.WALLET_DIR", str(tmp_path)),
+        patch("src.config.SERVER_WALLET_FILE", str(tmp_path / "server_wallet.txt")),
     ):
         yield tmp_path
 
@@ -26,8 +28,7 @@ def peripheral(temp_wallet_dir, tmp_path):
     led = LEDService(pin=17)
     config = AppConfig(
         gpio_pin=17,
-        ble_adapter=None,
-        data_dir=str(tmp_path),
+        ble_adapter="",
     )
     return TapayokaPeripheral(wallet, led, config)
 
@@ -87,7 +88,8 @@ class TestOnCommandWrite:
 
     def test_setup_server_valid(self, peripheral):
         peripheral._send_response = MagicMock()
-        cmd = self._make_command("SETUP_SERVER", payload="0x742d35Cc6634C0532925a3b844Bc9e7595f2bD08")
+        payload = "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD08"
+        cmd = self._make_command("SETUP_SERVER", payload=payload)
         peripheral._on_command_write(cmd, {})
         peripheral._send_response.assert_called_with("OK", "Server wallet configured")
 

@@ -1,6 +1,7 @@
 """Tests for LED/relay service (mock mode - no RPi.GPIO)."""
 
 import time
+
 from src.led_service import LEDService
 
 

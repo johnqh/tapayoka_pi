@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from bluezero import adapter, peripheral
+from typing import Any
 
 from .config import (
     BLE_CHAR_COMMAND_UUID,
