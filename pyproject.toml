@@ -20,6 +20,9 @@ ble = [
 gpio = [
     "RPi.GPIO>=0.7.1",
 ]
+ws = [
+    "websockets>=14.0",
+]
 pi = [
     "tapayoka-pi[ble,gpio]",
 ]
