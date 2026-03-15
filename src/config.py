@@ -29,9 +29,10 @@ class AppConfig:
     )
     gpio_pin: int = field(default_factory=lambda: int(os.getenv("GPIO_PIN", "17")))
     ble_adapter: str = field(default_factory=lambda: os.getenv("BLE_ADAPTER", ""))
-    kiosk_state_file: str = field(
-        default_factory=lambda: os.getenv("KIOSK_STATE_FILE", "/var/www/html/state.json")
+    kiosk_state_dir: str = field(
+        default_factory=lambda: os.getenv("KIOSK_STATE_DIR", "/var/www/html")
     )
+    kiosk_port: int = field(default_factory=lambda: int(os.getenv("KIOSK_PORT", "8026")))
 
     def load_server_wallet(self) -> str:
         """Load server wallet address from file or env."""

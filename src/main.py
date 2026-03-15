@@ -6,6 +6,8 @@ import sys
 
 from .config import AppConfig
 from .eth_wallet import EthWallet
+from .kiosk_server import start_kiosk_server
+from .kiosk_state import generate_deep_link, update_kiosk_state
 from .led_service import LEDService
 
 
@@ -19,6 +21,20 @@ def main() -> None:
     config = AppConfig()
     wallet = EthWallet()
     led = LEDService(pin=config.gpio_pin)
+
+    # Start kiosk HTTP server (background thread)
+    device_name = f"tapayoka-{wallet.address_short}"
+    start_kiosk_server(state_dir=config.kiosk_state_dir, port=config.kiosk_port)
+
+    deep_link = generate_deep_link(
+        transport=transport,
+        wallet_address=wallet.address,
+        device_name=device_name,
+        state_dir=config.kiosk_state_dir,
+    )
+    state_file = os.path.join(config.kiosk_state_dir, "state.json")
+    update_kiosk_state(state_file, status="QR", qr_url=deep_link, message="Scan to connect")
+    print(f"[Kiosk] QR deep link: {deep_link}")
 
     server_wallet = config.load_server_wallet()
     if server_wallet:
