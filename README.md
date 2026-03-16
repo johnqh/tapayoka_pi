@@ -4,14 +4,19 @@ BLE GATT peripheral firmware for Raspberry Pi. Generates ETH keypair on first bo
 
 ## Setup
 
+Requires Python 3.11+.
+
 ```bash
 # On Raspberry Pi (production: BLE + GPIO)
 pip install -e ".[dev,ble,gpio]"
 python -m src.main
 
 # Local dev on Mac/Linux (WebSocket, no BLE/GPIO needed)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
 pip install -e ".[dev,ws]"
-TRANSPORT=ws python -m src.main    # starts WebSocket server on ws://0.0.0.0:8765
+KIOSK_STATE_DIR=/tmp/tapayoka_kiosk TRANSPORT=ws python -m src.main
 ```
 
 ## Architecture
