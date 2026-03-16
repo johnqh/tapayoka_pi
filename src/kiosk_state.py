@@ -90,7 +90,10 @@ def generate_deep_link(
 
     if state_dir:
         os.makedirs(state_dir, exist_ok=True)
-        img = qrcode.make(url, box_size=10, border=4).convert("RGB")
+        qr = qrcode.QRCode(box_size=10, border=4)
+        qr.add_data(url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
         qr_path = os.path.join(state_dir, "qr.png")
         img.save(qr_path)
         print(f"[Kiosk] QR code PNG saved to {qr_path}")
