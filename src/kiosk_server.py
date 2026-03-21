@@ -135,6 +135,12 @@ KIOSK_HTML = """\
               }
             }, 1000);
 
+          } else if (data.status === 'CONNECTED') {
+            qrBox.style.display = 'none';
+            statusBox.style.display = 'none';
+            if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+            heading.textContent = 'Connected';
+
           } else if (data.status === 'QR' && data.qr_url) {
             statusBox.style.display = 'none';
             qrBox.style.display = 'flex';

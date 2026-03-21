@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from .config import (
@@ -14,6 +15,7 @@ from .config import (
     AppConfig,
 )
 from .eth_wallet import EthWallet
+from .kiosk_state import update_kiosk_state
 from .led_service import LEDService
 
 
@@ -38,9 +40,13 @@ class TapayokaPeripheral:
 
     def _on_connect(self, ble_device: str) -> None:
         print(f"[BLE] Device connected: {ble_device}")
+        state_file = os.path.join(self._config.kiosk_state_dir, "state.json")
+        update_kiosk_state(state_file, status="CONNECTED", message="Connected")
 
     def _on_disconnect(self, adapter_address: str, device_address: str) -> None:
         print(f"[BLE] Device disconnected: {device_address}")
+        state_file = os.path.join(self._config.kiosk_state_dir, "state.json")
+        update_kiosk_state(state_file, status="QR", message="Scan to connect")
         if self._led.is_active:
             print("[BLE] Safety deactivation on disconnect")
             self._led.deactivate()

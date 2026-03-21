@@ -19,9 +19,11 @@ BLE GATT peripheral firmware for Raspberry Pi. Generates ETH keypair on first bo
 pip install -e ".[dev,ble,gpio]"
 python -m src.main
 
-# Local dev on Mac/Linux (WebSocket, no BLE/GPIO needed)
+# Local dev on Mac (WebSocket, no BLE/GPIO needed)
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev,ws]"
-TRANSPORT=ws python -m src.main    # starts WebSocket server on ws://0.0.0.0:8765
+TRANSPORT=ws KIOSK_STATE_DIR=./kiosk_state python -m src.main
 
 # Tests & linting
 pytest tests/ -v
@@ -29,6 +31,8 @@ ruff check src/ tests/
 mypy src/ --ignore-missing-imports
 docker compose up --build
 ```
+
+> **macOS notes**: Use `python3` to create the venv (`python` is not aliased by default). `KIOSK_STATE_DIR` defaults to `/var/www/html` which requires root — override it with a local path like `./kiosk_state`.
 
 ## Transport Modes
 

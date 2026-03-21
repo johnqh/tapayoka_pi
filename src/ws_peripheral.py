@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
 
 from .config import BLE_DEVICE_NAME_PREFIX, AppConfig
 from .eth_wallet import EthWallet
+from .kiosk_state import update_kiosk_state
 from .led_service import LEDService
 
 
@@ -99,6 +101,8 @@ class TapayokaWsPeripheral:
 
         remote = ws.remote_address
         print(f"[WS] Client connected: {remote}")
+        state_file = os.path.join(self._config.kiosk_state_dir, "state.json")
+        update_kiosk_state(state_file, status="CONNECTED", message="Connected")
 
         # Send announce (replaces BLE advertising/discovery)
         await ws.send(json.dumps({
@@ -139,6 +143,7 @@ class TapayokaWsPeripheral:
             pass
         finally:
             print(f"[WS] Client disconnected: {remote}")
+            update_kiosk_state(state_file, status="QR", message="Scan to connect")
             if self._led.is_active:
                 print("[WS] Safety deactivation on disconnect")
                 self._led.deactivate()
