@@ -59,7 +59,7 @@ class EthWallet:
         return {
             **challenge,
             "signedPayload": message,
-            "signature": signed.signature.hex(),
+            "signature": "0x" + signed.signature.hex(),
         }
 
     def verify_server_signature(
