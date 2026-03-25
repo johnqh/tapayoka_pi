@@ -62,6 +62,16 @@ class EthWallet:
             "signature": "0x" + signed.signature.hex(),
         }
 
+    def sign_response(self, data: dict) -> dict:
+        """Sign a response data object. Returns an EthSignedMessage dict."""
+        message = json.dumps(data)
+        signed = self._account.sign_message(encode_defunct(text=message))
+        return {
+            "walletAddress": self.address,
+            "message": message,
+            "signature": "0x" + signed.signature.hex(),
+        }
+
     def verify_server_signature(
         self, payload: str, signature: str, server_address: str
     ) -> bool:
@@ -75,3 +85,23 @@ class EthWallet:
         except Exception as e:
             print(f"[Wallet] Signature verification failed: {e}")
             return False
+
+
+def verify_signed_response(data: object, signing: dict) -> bool:
+    """Verify a signed response: data integrity + signature validity.
+
+    1. Decodes signing["message"] as JSON and compares with data.
+    2. Recovers signer from signature and compares with signing["walletAddress"].
+    """
+    try:
+        decoded = json.loads(signing["message"])
+        if json.dumps(decoded) != json.dumps(data):
+            return False
+        sig_bytes = bytes.fromhex(signing["signature"].replace("0x", ""))
+        recovered = Account.recover_message(
+            encode_defunct(text=signing["message"]), signature=sig_bytes
+        )
+        return bool(recovered.lower() == signing["walletAddress"].lower())
+    except Exception as e:
+        print(f"[Wallet] verify_signed_response failed: {e}")
+        return False

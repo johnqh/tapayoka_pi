@@ -32,11 +32,13 @@ class TapayokaWsPeripheral:
         """Build device info response (mirrors _on_device_info_read)."""
         challenge = self._wallet.sign_challenge()
         server_wallet = self._config.load_server_wallet()
-        return {
+        info = {
             **challenge,
             "firmwareVersion": "0.1.0",
             "hasServerWallet": bool(server_wallet),
         }
+        info["signing"] = self._wallet.sign_response(info)
+        return info
 
     def _handle_command(self, data: dict[str, Any]) -> dict[str, Any]:
         """Process a command and return response dict (mirrors _on_command_write)."""

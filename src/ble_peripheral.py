@@ -60,7 +60,9 @@ class TapayokaPeripheral:
             "firmwareVersion": "0.1.0",
             "hasServerWallet": bool(server_wallet),
         }
-        data = json.dumps(info).encode("utf-8")
+        signing = self._wallet.sign_response(info)
+        payload = {**info, "signing": signing}
+        data = json.dumps(payload).encode("utf-8")
         print(f"[BLE] Device info read: {self._wallet.address[:10]}...")
         return list(data)
 
@@ -129,12 +131,16 @@ class TapayokaPeripheral:
         except (json.JSONDecodeError, KeyError) as e:
             self._send_response("ERROR", f"Invalid payload: {e}")
 
-    def _send_response(self, status: str, message: str = "", data: str = "") -> None:
-        response = {"status": status}
+    def _send_response(
+        self, status: str, message: str = "", data: str = "", sign: bool = False
+    ) -> None:
+        response: dict[str, Any] = {"status": status}
         if message:
             response["message"] = message
         if data:
             response["data"] = data
+        if sign:
+            response["signing"] = self._wallet.sign_response(response)
         print(f"[BLE] Response: {status} - {message}")
 
     def start(self) -> None:
