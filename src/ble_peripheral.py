@@ -14,7 +14,7 @@ from .config import (
     BLE_SERVICE_UUID,
     AppConfig,
 )
-from .eth_wallet import EthWallet, verify_signed_response
+from .eth_wallet import EthWallet, verify_signed_payload
 from .kiosk_state import update_kiosk_state
 from .led_service import LEDService
 
@@ -70,7 +70,12 @@ class TapayokaPeripheral:
         return list(payload)
 
     def _on_command_write(self, value: list[int], options: dict[str, Any]) -> None:
-        """Handle incoming BLE commands."""
+        """Handle incoming BLE commands.
+
+        All commands require a signed payload.
+        SETUP_SERVER: verify payload, save server wallet.
+        EXECUTE:      verify payload + signer matches stored server wallet, then execute.
+        """
         try:
             data = json.loads(bytes(value).decode("utf-8"))
             command = data.get("command", "").upper()
@@ -78,21 +83,8 @@ class TapayokaPeripheral:
 
             if command == "SETUP_SERVER":
                 self._handle_setup_server(data)
-            elif command == "AUTHORIZE":
-                self._handle_authorize(data)
-            elif command == "ON":
-                self._led.activate(duration_seconds=data.get("seconds", 0))
-                self._send_response("OK", "Activated")
-            elif command == "OFF":
-                self._led.deactivate()
-                self._send_response("OK", "Deactivated")
-            elif command == "STATUS":
-                status = {
-                    "active": self._led.is_active,
-                    "walletAddress": self._wallet.address,
-                    "hasServerWallet": bool(self._config.load_server_wallet()),
-                }
-                self._send_response("OK", data=json.dumps(status))
+            elif command == "EXECUTE":
+                self._handle_execute(data)
             else:
                 self._send_response("ERROR", f"Unknown command: {command}")
 
@@ -100,19 +92,17 @@ class TapayokaPeripheral:
             print(f"[BLE] Error parsing command: {e}")
             self._send_response("ERROR", str(e))
 
-    def _handle_setup_server(self, data: dict[str, Any]) -> None:
-        response_data = data.get("data")
-        signing = data.get("signing")
+    def _handle_setup_server(self, msg: dict[str, Any]) -> None:
+        """Verify signature and save server wallet address.
 
-        if not response_data or not signing:
-            self._send_response("ERROR", "Missing data or signing")
-            return
-
-        if not verify_signed_response(response_data, signing):
+        msg format: { command, data, signing } — verify_signed_payload reads
+        data/signing directly from the dict.
+        """
+        if not verify_signed_payload(msg):
             self._send_response("UNAUTHORIZED", "Invalid server signature")
             return
 
-        server_address = signing.get("walletAddress", "")
+        server_address = msg.get("signing", {}).get("walletAddress", "")
         if not server_address or not server_address.startswith("0x"):
             self._send_response("ERROR", "Invalid server wallet address")
             return
@@ -121,30 +111,30 @@ class TapayokaPeripheral:
         print(f"[BLE] Server wallet set: {server_address[:10]}...")
         self._send_response("OK", "Server wallet configured")
 
-    def _handle_authorize(self, data: dict[str, Any]) -> None:
-        payload = data.get("payload", "")
-        signature = data.get("signature", "")
-        server_wallet = self._config.load_server_wallet()
+    def _handle_execute(self, msg: dict[str, Any]) -> None:
+        """Execute a server-signed command.
 
+        msg format: { command, data, signing } — verifies the signer matches
+        the stored server wallet, then activates the relay.
+        """
+        server_wallet = self._config.load_server_wallet()
         if not server_wallet:
             self._send_response("ERROR", "No server wallet configured")
             return
-        if not self._wallet.verify_server_signature(payload, signature, server_wallet):
+
+        if not verify_signed_payload(msg, expected_signer=server_wallet):
             self._send_response("UNAUTHORIZED", "Invalid server signature")
             return
 
-        try:
-            auth = json.loads(payload)
-            seconds = auth.get("seconds", 0)
-            service_type = auth.get("serviceType", "TRIGGER")
-            if service_type == "TRIGGER":
-                self._led.activate(duration_seconds=1)
-            else:
-                self._led.activate(duration_seconds=seconds)
-            print(f"[BLE] Authorized: {service_type} for {seconds}s")
-            self._send_response("OK", f"Activated for {seconds}s")
-        except (json.JSONDecodeError, KeyError) as e:
-            self._send_response("ERROR", f"Invalid payload: {e}")
+        cmd = msg.get("data", {})
+        seconds = cmd.get("seconds", 0)
+        offering_type = cmd.get("offeringType", "TRIGGER")
+        if offering_type == "TRIGGER":
+            self._led.activate(duration_seconds=1)
+        else:
+            self._led.activate(duration_seconds=seconds)
+        print(f"[BLE] Execute: {offering_type} for {seconds}s")
+        self._send_response("OK", f"Activated for {seconds}s")
 
     def _send_response(
         self, status: str, message: str = "", data: str = "", sign: bool = False

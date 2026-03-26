@@ -105,3 +105,32 @@ def verify_signed_response(data: object, signing: dict) -> bool:
     except Exception as e:
         print(f"[Wallet] verify_signed_response failed: {e}")
         return False
+
+
+def verify_signed_payload(
+    payload: dict, expected_signer: str | None = None
+) -> bool:
+    """Verify a SignedData payload envelope: data integrity + signature + optional signer check.
+
+    Args:
+        payload: A dict with 'data' and 'signing' fields (SignedData envelope).
+        expected_signer: If provided, also verify the signer matches this address.
+
+    Returns:
+        True if the envelope is valid (and signer matches, if expected_signer given).
+    """
+    data = payload.get("data")
+    signing = payload.get("signing")
+
+    if not data or not signing:
+        return False
+
+    if not verify_signed_response(data, signing):
+        return False
+
+    if expected_signer:
+        signer = signing.get("walletAddress", "")
+        if signer.lower() != expected_signer.lower():
+            return False
+
+    return True

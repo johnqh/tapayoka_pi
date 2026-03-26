@@ -8,7 +8,7 @@ import os
 from typing import Any
 
 from .config import BLE_DEVICE_NAME_PREFIX, AppConfig
-from .eth_wallet import EthWallet, verify_signed_response
+from .eth_wallet import EthWallet, verify_signed_payload
 from .kiosk_state import update_kiosk_state
 from .led_service import LEDService
 
@@ -51,35 +51,21 @@ class TapayokaWsPeripheral:
 
         if command == "SETUP_SERVER":
             return self._handle_setup_server(data)
-        elif command == "AUTHORIZE":
-            return self._handle_authorize(data)
-        elif command == "ON":
-            self._led.activate(duration_seconds=data.get("seconds", 0))
-            return {"status": "OK", "message": "Activated"}
-        elif command == "OFF":
-            self._led.deactivate()
-            return {"status": "OK", "message": "Deactivated"}
-        elif command == "STATUS":
-            status_data = {
-                "active": self._led.is_active,
-                "walletAddress": self._wallet.address,
-                "hasServerWallet": bool(self._config.load_server_wallet()),
-            }
-            return {"status": "OK", "data": json.dumps(status_data)}
+        elif command == "EXECUTE":
+            return self._handle_execute(data)
         else:
             return {"status": "ERROR", "message": f"Unknown command: {command}"}
 
-    def _handle_setup_server(self, data: dict[str, Any]) -> dict[str, Any]:
-        response_data = data.get("data")
-        signing = data.get("signing")
+    def _handle_setup_server(self, msg: dict[str, Any]) -> dict[str, Any]:
+        """Verify signature and save server wallet address.
 
-        if not response_data or not signing:
-            return {"status": "ERROR", "message": "Missing data or signing"}
-
-        if not verify_signed_response(response_data, signing):
+        msg format: { command, data, signing } — verify_signed_payload reads
+        data/signing directly from the dict.
+        """
+        if not verify_signed_payload(msg):
             return {"status": "UNAUTHORIZED", "message": "Invalid server signature"}
 
-        server_address = signing.get("walletAddress", "")
+        server_address = msg.get("signing", {}).get("walletAddress", "")
         if not server_address or not server_address.startswith("0x"):
             return {"status": "ERROR", "message": "Invalid server wallet address"}
 
@@ -87,28 +73,28 @@ class TapayokaWsPeripheral:
         print(f"[WS] Server wallet set: {server_address[:10]}...")
         return {"status": "OK", "message": "Server wallet configured"}
 
-    def _handle_authorize(self, data: dict[str, Any]) -> dict[str, Any]:
-        payload = data.get("payload", "")
-        signature = data.get("signature", "")
-        server_wallet = self._config.load_server_wallet()
+    def _handle_execute(self, msg: dict[str, Any]) -> dict[str, Any]:
+        """Execute a server-signed command.
 
+        msg format: { command, data, signing } — verifies the signer matches
+        the stored server wallet, then activates the relay.
+        """
+        server_wallet = self._config.load_server_wallet()
         if not server_wallet:
             return {"status": "ERROR", "message": "No server wallet configured"}
-        if not self._wallet.verify_server_signature(payload, signature, server_wallet):
+
+        if not verify_signed_payload(msg, expected_signer=server_wallet):
             return {"status": "UNAUTHORIZED", "message": "Invalid server signature"}
 
-        try:
-            auth = json.loads(payload)
-            seconds = auth.get("seconds", 0)
-            service_type = auth.get("serviceType", "TRIGGER")
-            if service_type == "TRIGGER":
-                self._led.activate(duration_seconds=1)
-            else:
-                self._led.activate(duration_seconds=seconds)
-            print(f"[WS] Authorized: {service_type} for {seconds}s")
-            return {"status": "OK", "message": f"Activated for {seconds}s"}
-        except (json.JSONDecodeError, KeyError) as e:
-            return {"status": "ERROR", "message": f"Invalid payload: {e}"}
+        cmd = msg.get("data", {})
+        seconds = cmd.get("seconds", 0)
+        offering_type = cmd.get("offeringType", "TRIGGER")
+        if offering_type == "TRIGGER":
+            self._led.activate(duration_seconds=1)
+        else:
+            self._led.activate(duration_seconds=seconds)
+        print(f"[WS] Execute: {offering_type} for {seconds}s")
+        return {"status": "OK", "message": f"Activated for {seconds}s"}
 
     # ---------- WebSocket connection handler ----------
 
