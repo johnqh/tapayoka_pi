@@ -8,7 +8,7 @@ import os
 from typing import Any
 
 from .config import BLE_DEVICE_NAME_PREFIX, AppConfig
-from .eth_wallet import EthWallet
+from .eth_wallet import EthWallet, verify_signed_response
 from .kiosk_state import update_kiosk_state
 from .led_service import LEDService
 
@@ -29,16 +29,20 @@ class TapayokaWsPeripheral:
     # ---------- handlers ----------
 
     def _build_device_info(self) -> dict[str, Any]:
-        """Build device info response (mirrors _on_device_info_read)."""
-        challenge = self._wallet.sign_challenge()
+        """Build device info as {data, signing} envelope (mirrors _on_device_info_read)."""
+        import secrets as stdlib_secrets
+        import time
+
         server_wallet = self._config.load_server_wallet()
-        info = {
-            **challenge,
+        data = {
+            "walletAddress": self._wallet.address,
             "firmwareVersion": "0.1.0",
             "hasServerWallet": bool(server_wallet),
+            "timestamp": int(time.time()),
+            "nonce": stdlib_secrets.token_hex(16),
         }
-        info["signing"] = self._wallet.sign_response(info)
-        return info
+        signing = self._wallet.sign_response(data)
+        return {"data": data, "signing": signing}
 
     def _handle_command(self, data: dict[str, Any]) -> dict[str, Any]:
         """Process a command and return response dict (mirrors _on_command_write)."""
@@ -66,11 +70,21 @@ class TapayokaWsPeripheral:
             return {"status": "ERROR", "message": f"Unknown command: {command}"}
 
     def _handle_setup_server(self, data: dict[str, Any]) -> dict[str, Any]:
-        address = data.get("payload", "")
-        if not address or not address.startswith("0x"):
+        response_data = data.get("data")
+        signing = data.get("signing")
+
+        if not response_data or not signing:
+            return {"status": "ERROR", "message": "Missing data or signing"}
+
+        if not verify_signed_response(response_data, signing):
+            return {"status": "UNAUTHORIZED", "message": "Invalid server signature"}
+
+        server_address = signing.get("walletAddress", "")
+        if not server_address or not server_address.startswith("0x"):
             return {"status": "ERROR", "message": "Invalid server wallet address"}
-        self._config.save_server_wallet(address)
-        print(f"[WS] Server wallet set: {address[:10]}...")
+
+        self._config.save_server_wallet(server_address)
+        print(f"[WS] Server wallet set: {server_address[:10]}...")
         return {"status": "OK", "message": "Server wallet configured"}
 
     def _handle_authorize(self, data: dict[str, Any]) -> dict[str, Any]:

@@ -14,7 +14,7 @@ from .config import (
     BLE_SERVICE_UUID,
     AppConfig,
 )
-from .eth_wallet import EthWallet
+from .eth_wallet import EthWallet, verify_signed_response
 from .kiosk_state import update_kiosk_state
 from .led_service import LEDService
 
@@ -52,19 +52,22 @@ class TapayokaPeripheral:
             self._led.deactivate()
 
     def _on_device_info_read(self, options: dict[str, Any]) -> list[int]:
-        """Return device info including signed challenge."""
-        challenge = self._wallet.sign_challenge()
+        """Return device info as {data, signing} envelope."""
+        import secrets as stdlib_secrets
+        import time
+
         server_wallet = self._config.load_server_wallet()
-        info = {
-            **challenge,
+        data = {
+            "walletAddress": self._wallet.address,
             "firmwareVersion": "0.1.0",
             "hasServerWallet": bool(server_wallet),
+            "timestamp": int(time.time()),
+            "nonce": stdlib_secrets.token_hex(16),
         }
-        signing = self._wallet.sign_response(info)
-        payload = {**info, "signing": signing}
-        data = json.dumps(payload).encode("utf-8")
+        signing = self._wallet.sign_response(data)
+        payload = json.dumps({"data": data, "signing": signing}).encode("utf-8")
         print(f"[BLE] Device info read: {self._wallet.address[:10]}...")
-        return list(data)
+        return list(payload)
 
     def _on_command_write(self, value: list[int], options: dict[str, Any]) -> None:
         """Handle incoming BLE commands."""
@@ -98,12 +101,24 @@ class TapayokaPeripheral:
             self._send_response("ERROR", str(e))
 
     def _handle_setup_server(self, data: dict[str, Any]) -> None:
-        address = data.get("payload", "")
-        if not address or not address.startswith("0x"):
+        response_data = data.get("data")
+        signing = data.get("signing")
+
+        if not response_data or not signing:
+            self._send_response("ERROR", "Missing data or signing")
+            return
+
+        if not verify_signed_response(response_data, signing):
+            self._send_response("UNAUTHORIZED", "Invalid server signature")
+            return
+
+        server_address = signing.get("walletAddress", "")
+        if not server_address or not server_address.startswith("0x"):
             self._send_response("ERROR", "Invalid server wallet address")
             return
-        self._config.save_server_wallet(address)
-        print(f"[BLE] Server wallet set: {address[:10]}...")
+
+        self._config.save_server_wallet(server_address)
+        print(f"[BLE] Server wallet set: {server_address[:10]}...")
         self._send_response("OK", "Server wallet configured")
 
     def _handle_authorize(self, data: dict[str, Any]) -> None:
