@@ -4,6 +4,7 @@ import json
 import os
 import secrets as stdlib_secrets
 import time
+from datetime import datetime, timezone
 
 from eth_account import Account
 from eth_account.messages import encode_defunct
@@ -63,8 +64,13 @@ class EthWallet:
         }
 
     def sign_response(self, data: dict) -> dict:
-        """Sign a response data object. Returns an EthSignedMessage dict."""
-        message = json.dumps(data)
+        """Sign a response data object. Returns an EthSignedMessage dict.
+
+        Injects signing_timestamp into the message to prevent replay attacks.
+        The timestamp is only in the signed message, not in the data field.
+        """
+        message_obj = {**data, "signing_timestamp": datetime.now(timezone.utc).isoformat()}
+        message = json.dumps(message_obj)
         signed = self._account.sign_message(encode_defunct(text=message))
         return {
             "walletAddress": self.address,
@@ -87,14 +93,28 @@ class EthWallet:
             return False
 
 
-def verify_signed_response(data: object, signing: dict) -> bool:
+def verify_signed_response(
+    data: object, signing: dict, max_age_s: float = 30.0
+) -> bool:
     """Verify a signed response: data integrity + signature validity.
 
-    1. Decodes signing["message"] as JSON and compares with data.
-    2. Recovers signer from signature and compares with signing["walletAddress"].
+    1. Decodes signing["message"] as JSON.
+    2. If signing_timestamp is present, checks it is within max_age_s of now,
+       then removes it before comparing with data.
+    3. Deep-compares the (remaining) decoded message with data.
+    4. Recovers signer from signature and compares with signing["walletAddress"].
     """
     try:
         decoded = json.loads(signing["message"])
+
+        signing_ts = decoded.pop("signing_timestamp", None)
+        if signing_ts is not None:
+            ts = datetime.fromisoformat(signing_ts.replace("Z", "+00:00"))
+            age = abs((datetime.now(timezone.utc) - ts).total_seconds())
+            if age > max_age_s:
+                print(f"[Wallet] signing_timestamp too old: {age:.1f}s > {max_age_s}s")
+                return False
+
         if json.dumps(decoded) != json.dumps(data):
             return False
         sig_bytes = bytes.fromhex(signing["signature"].replace("0x", ""))
